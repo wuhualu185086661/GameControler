@@ -28,7 +28,8 @@ public class MainActivity extends Activity {
 	private String LAST_DIR = "";
 	private String FINAL_DIR = "暂时未找到方向";
 	private Timer timer;
-	private int COUNT_DIR;
+	private int COUNT_DIR = 0;
+	private int COUNT_CHANGE = 0;
 
 	/**
 	 * 这里是步数判断引入的变量
@@ -69,6 +70,13 @@ public class MainActivity extends Activity {
 	public static int CURRENT_SETP = 0;
 	private TextView count;
 	private TextView valuesTV;
+	private TextView change;
+
+	/**
+	 * 这里是二位坐标引入的变量
+	 */
+	private TextView XYZ;
+	private String Final_XYZ = "";
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -78,6 +86,8 @@ public class MainActivity extends Activity {
 		sm = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
 		count = (TextView) findViewById(R.id.count);
 		valuesTV = (TextView) findViewById(R.id.values);
+		XYZ = (TextView) findViewById(R.id.XYZ);
+		change = (TextView) findViewById(R.id.change);
 	}
 
 	@Override
@@ -89,17 +99,17 @@ public class MainActivity extends Activity {
 		mSensor = sm.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
 		if (aSensor != null) {
 			sm.registerListener(myListener, aSensor, SensorManager.SENSOR_DELAY_UI);
-			// Toast.makeText(MainActivity.this, "加速度传感器注册成功", 0).show();
+			Toast.makeText(MainActivity.this, "加速度传感器注册成功", 0).show();
 		} else {
 			Toast.makeText(this, "您的手机不支持加速度传感器", Toast.LENGTH_LONG).show();
 		}
 		if (mSensor != null) {
 			sm.registerListener(myListener, mSensor, SensorManager.SENSOR_DELAY_UI);
-			// Toast.makeText(MainActivity.this, "磁场感应器注册成功", 0).show();
+			Toast.makeText(MainActivity.this, "磁场感应器注册成功", 0).show();
 		} else {
 			Toast.makeText(MainActivity.this, "您的手机不支持磁场感应器", 0).show();
 		}
-		test();
+		time();
 		calculateOrientation();
 	}
 
@@ -112,12 +122,6 @@ public class MainActivity extends Activity {
 	}
 
 	private void calculateOrientation() {
-		// Toast.makeText(MainActivity.this, "COUNT_DIR的值是：" +
-		// String.valueOf(COUNT_DIR), 0).show();
-		// Toast.makeText(MainActivity.this, "LAST_DIR的值是：" +
-		// String.valueOf(LAST_DIR), 0).show();
-		// Toast.makeText(MainActivity.this, "TEMP_DIR的值是：" +
-		// String.valueOf(TEMP_DIR), 0).show();
 		float[] values = new float[3];
 		float[] R = new float[9];
 		SensorManager.getRotationMatrix(R, null, accelerometerValues, magnetticFiledValues);
@@ -136,37 +140,42 @@ public class MainActivity extends Activity {
 		}
 	}
 
-	public void test() {
-		System.out.println("COUNT_DIR" + String.valueOf(COUNT_DIR));
-		System.out.println("LAST_DIR" + LAST_DIR);
-		System.out.println("TEMP_DIR" + TEMP_DIR);
+	public void time() {
 		timer = new Timer(true);
 		TimerTask task = new TimerTask() {
 			public void run() {
 				if (LAST_DIR == "" || LAST_DIR != TEMP_DIR) {
 					LAST_DIR = TEMP_DIR;
+					COUNT_CHANGE++;
+					// 下面的if是为了屏蔽微小摆动和传感器的偶然误差
+					if (COUNT_CHANGE >= 5) {
+						FINAL_DIR = "当前方向持续时间不足2秒";						
+						COUNT_DIR = 0;
+						CURRENT_SETP = 0;
+					}
 				} else {
 					COUNT_DIR++;
-					if (COUNT_DIR >= 3) {
+					COUNT_CHANGE = 0;
+					LAST_DIR = TEMP_DIR;
+					if (COUNT_DIR >= 20) {
 						COUNT_DIR = 0;
 						FINAL_DIR = TEMP_DIR;
-
 					}
-
 				}
 
 			}
 		};
 		// schedule(需要循环执行的任务,延迟多久开始执行,每隔多长时间执行一次)
-		timer.schedule(task, 0, 1000);
+		timer.schedule(task, 0, 100);
 	}
 
 	final SensorEventListener myListener = new SensorEventListener() {
 		@Override
 		public void onSensorChanged(SensorEvent sensorEvent) {
+			XYZ.setText(Final_XYZ);
 			direction.setText(FINAL_DIR);
-
 			count.setText(String.valueOf(CURRENT_SETP));
+			change.setText(String.valueOf(COUNT_CHANGE));
 			if (sensorEvent.sensor.getType() == Sensor.TYPE_MAGNETIC_FIELD)
 				magnetticFiledValues = sensorEvent.values.clone();
 			synchronized (this) {
@@ -197,6 +206,18 @@ public class MainActivity extends Activity {
 						timeOfThisPeak = timeOfNow;
 						// 更新步数
 						CURRENT_SETP++;
+						if (CURRENT_SETP >= 1) {
+							CURRENT_SETP = 0;
+							COUNT_DIR = 0;
+							if (FINAL_DIR == "北")
+								Final_XYZ = "上";
+							else if (FINAL_DIR == "东")
+								Final_XYZ = "右";
+							else if (FINAL_DIR == "南")
+								Final_XYZ = "下";
+							else
+								Final_XYZ = "左";
+						}
 					}
 					// initialValue:动态阈值需要动态的数据，这个值用于这些动态数据的阈值
 					if (timeOfNow - timeOfLastPeak >= 100 && (peakOfWave - valleyOfWave >= initialValue)) {
